@@ -1,56 +1,21 @@
 #!/usr/bin/env bash
 
-CPPCHECK_unmatched=
-for f in *.c; do
-    CPPCHECK_unmatched="$CPPCHECK_unmatched --suppress=unmatchedSuppression:$f"
-done
-
-CPPCHECK_suppresses="--inline-suppr harness.c \
---suppress=missingIncludeSystem \
---suppress=noValidConfiguration \
---suppress=unusedFunction \
---suppress=identicalInnerCondition:log2_lshift16.h \
---suppress=nullPointerRedundantCheck:report.c \
---suppress=nullPointerRedundantCheck:harness.c \
---suppress=nullPointer:queue.c \
---suppress=nullPointer:qtest.c"
-CPPCHECK_OPTS="-I. --enable=all --error-exitcode=1 --force $CPPCHECK_suppresses $CPPCHECK_unmatched ."
-
 RETURN=0
-CLANG_FORMAT=$(which clang-format)
+BLACK=$(which black)
 if [ $? -ne 0 ]; then
-    echo "[!] clang-format not installed. Unable to check source file format policy." >&2
+    echo "[!] black not installed. Unable to check source file format policy." >&2
     exit 1
 fi
 
-CPPCHECK=$(which cppcheck)
-if [ $? -ne 0 ]; then
-    echo "[!] cppcheck not installed. Unable to perform static analysis." >&2
-    exit 1
-fi
-
-# Expected Cppcheck version is 1.90+
-# First, Cppcheck 2.x
-if [ -z "$($CPPCHECK --version | grep -E '^Cppcheck\s2')" ]; then
-    # Second, Cppcheck 1.x
-    CPPCHECK_VER=$($CPPCHECK --version | sed -Ee 's/Cppcheck 1.([0-9]+)/\1/;q')
-    if [ $CPPCHECK_VER -lt 90 ]; then
-        echo "[!] cppcheck version must be at least 1.90." >&2
-        echo -e "    Check 'Developer Info' for building Cppcheck from source:\n" \
-                "          http://cppcheck.sourceforge.net/devinfo/" >&2
-        exit 1
-    fi
-fi
-
-ASPELL=$(which aspell)
-if [ $? -ne 0 ]; then
-    echo "[!] aspell not installed. Unable to do spelling check." >&2
-    exit 1
-fi
-if [ -z "$(aspell dump dicts | grep -E '^en$')" ]; then
-    echo "[!] aspell-en not installed. Unable to do spelling check." >&2
-    exit 1
-fi
+# ASPELL=$(which aspell)
+# if [ $? -ne 0 ]; then
+#     echo "[!] aspell not installed. Unable to do spelling check." >&2
+#     exit 1
+# fi
+# if [ -z "$(aspell dump dicts | grep -E '^en$')" ]; then
+#     echo "[!] aspell-en not installed. Unable to do spelling check." >&2
+#     exit 1
+# fi
 
 DIFF=$(which colordiff)
 if [ $? -ne 0 ]; then
@@ -62,7 +27,8 @@ if [ $? -ne 0 ]; then
     SHA1SUM=shasum
 fi
 
-FILES=$(git diff --cached --name-only --diff-filter=ACMR | grep -E "\.(c|cpp|h)$")
+# FILES=$(git diff --cached --name-only --diff-filter=ACMR | grep -E "\.(c|cpp|h)$")
+FILES=$(git diff --name-only --diff-filter=ACMR | grep -E "\.(py)$")
 for FILE in $FILES; do
     nf=$(git checkout-index --temp $FILE | cut -f 1)
     tempdir=$(mktemp -d) || exit 1
@@ -71,8 +37,8 @@ for FILE in $FILES; do
 
     source="${tempdir}/${basename}"
     mv $nf $source
-    cp .clang-format $tempdir
-    $CLANG_FORMAT $source > $newfile 2>> /dev/null
+    # cp .clang-format $tempdir
+    $BLACK $source > $newfile 2>> /dev/null
     $DIFF -u -p -B --label="modified $FILE" --label="expected coding style" \
           "${source}" "${newfile}"
     r=$?
@@ -84,7 +50,7 @@ for FILE in $FILES; do
     if [ $RETURN -eq 1 ]; then
         echo "" >&2
         echo "Make sure you indent as the following:" >&2
-        echo "    clang-format -i $FILE" >&2
+        echo "    black -i $FILE" >&2
         echo
     fi
 done
@@ -94,38 +60,8 @@ if [ ! -z "${FILES[*]}" ]; then
     echo "${FILES[*]}"
 fi
 
-$SHA1SUM -c scripts/checksums >/dev/null
-if [ $? -ne 0 ]; then
-    echo "[!] You are not allowed to change the header file queue.h or list.h" >&2
-    exit 1
-fi
-
-# Prevent unsafe functions
-root=$(git rev-parse --show-toplevel)
-banned="([^f]gets\()|(sprintf\()|(strcpy\()"
-status=0
-for file in $(git diff --staged --name-only | grep -E "\.(c|cc|cpp|h|hh|hpp)\$")
-do
-    filepath="${root}/${file}"
-    output=$(grep -nrE "${banned}" "${filepath}")
-    if [ ! -z "${output}" ]; then
-        echo "Dangerous function detected in ${filepath}"
-        echo "${output}"
-        echo
-        echo "Read 'Common vulnerabilities guide for C programmers' carefully."
-        echo "    https://security.web.cern.ch/security/recommendations/en/codetools/c.shtml"
-        RETURN=1
-    fi
-done
 
 # static analysis
-$CPPCHECK $CPPCHECK_OPTS >/dev/null
-if [ $? -ne 0 ]; then
-    RETURN=1
-    echo "" >&2
-    echo "Fail to pass static analysis." >&2
-    echo
-fi
 
 # non-ASCII filenames are not allowed.
 # Cross platform projects tend to avoid non-ASCII filenames; prevent
