@@ -1,6 +1,5 @@
 import urllib.request, json, graphviz
 
-l = [1, 3, 4, 3]
 # Support static config
 LISTENERS_CONFIG_DUMP_T = "type.googleapis.com/envoy.admin.v3.ListenersConfigDump"
 
