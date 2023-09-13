@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 
+#
 # git-good-commit(1) - Git hook to help you write good commit messages.
 # Released under the MIT License.
 #
+# Version 0.6.1
+#
 # https://github.com/tommarshall/git-good-commit
+#
 
 COMMIT_MSG_FILE="$1"
 COMMIT_MSG_LINES=
@@ -15,7 +19,6 @@ RED=
 YELLOW=
 BLUE=
 WHITE=
-CYAN=
 NC=
 
 #
@@ -29,7 +32,6 @@ set_colors() {
     YELLOW='\033[1;33m'
     BLUE='\033[1;34m'
     WHITE='\033[1;37m'
-    CYAN='\033[1;36m'
     NC='\033[0m' # No Color
   fi
 }
@@ -56,6 +58,7 @@ set_editor() {
 prompt_help() {
   echo -e "${RED}$(cat <<-EOF
 e - edit commit message
+y - proceed with commit
 n - abort commit
 ? - print help
 EOF
@@ -90,12 +93,6 @@ display_warnings() {
       echo -e " ${YELLOW}- ${ERROR}${NC}"
     done
   done
-
-  echo
-  echo -e "${RED}$(cat <<-EOF
-How to Write a Git Commit Message: https://chris.beams.io/posts/git-commit/
-EOF
-)${NC}"
 }
 
 #
@@ -118,10 +115,7 @@ read_commit_message() {
     [[ $REPLY =~ ^# ]]
     test $? -eq 0 || COMMIT_MSG_LINES+=("$REPLY")
 
-    [[ $REPLY =~ "# ------------------------ >8 ------------------------" ]]
-    break
-
-  done < $COMMIT_MSG_FILE
+  done < <(cat $COMMIT_MSG_FILE)
 }
 
 #
@@ -142,44 +136,22 @@ validate_commit_message() {
   # if the commit subject starts with 'fixup! ' there's nothing to validate, we can return here
   [[ $COMMIT_SUBJECT == 'fixup! '* ]] && return;
 
-  # skip first token in subject (e.g. issue ID from bugtracker which is validated otherwise)
-  skipfirsttokeninsubject=$(git config --get hooks.goodcommit.subjectskipfirsttoken || echo 'false')
-  if [ "$skipfirsttokeninsubject" == "true" ]; then
-    COMMIT_SUBJECT_TO_PROCESS=${COMMIT_SUBJECT#* }
-  else
-    COMMIT_SUBJECT_TO_PROCESS=$COMMIT_SUBJECT
-  fi
-
-  # 0. Check spelling
-  # ------------------------------------------------------------------------------
-  ASPELL=$(which aspell)
-  if [ $? -ne 0 ]; then
-      echo "Aspell not installed - unable to check spelling"
-  else
-      LINE_NUMBER=1
-      MISSPELLED_WORDS=$(echo "$COMMIT_MSG_LINES[LINE_NUMBER]" | $ASPELL --lang=en --list --home-dir=scripts --personal=aspell-pws)
-      if [ -n "$MISSPELLED_WORDS" ]; then
-        add_warning LINE_NUMBER "Possible misspelled word(s): $MISSPELLED_WORDS"
-      fi
-  fi
-
   # 1. Separate subject from body with a blank line
   # ------------------------------------------------------------------------------
 
   test ${#COMMIT_MSG_LINES[@]} -lt 1 || test -z "${COMMIT_MSG_LINES[1]}"
   test $? -eq 0 || add_warning 2 "Separate subject from body with a blank line"
 
-  # 2. Limit the subject line to configured number of characters
+  # 2. Limit the subject line to 50 characters
   # ------------------------------------------------------------------------------
 
-  subject_max_length=$(git config --get hooks.goodcommit.subjectmaxlength || echo '50')
-  test "${#COMMIT_SUBJECT}" -le $subject_max_length
-  test $? -eq 0 || add_warning 1 "Limit the subject line to $subject_max_length characters (${#COMMIT_SUBJECT} chars)"
+  test "${#COMMIT_SUBJECT}" -le 50
+  test $? -eq 0 || add_warning 1 "Limit the subject line to 50 characters (${#COMMIT_SUBJECT} chars)"
 
   # 3. Capitalize the subject line
   # ------------------------------------------------------------------------------
 
-  [[ ${COMMIT_SUBJECT_TO_PROCESS} =~ ^[[:blank:]]*([[:upper:]]{1}[[:lower:]]*|[[:digit:]]+)([[:blank:]]|[[:punct:]]|$) ]]
+  [[ ${COMMIT_SUBJECT} =~ ^[[:blank:]]*([[:upper:]]{1}[[:lower:]]*|[[:digit:]]+)([[:blank:]]|[[:punct:]]|$) ]]
   test $? -eq 0 || add_warning 1 "Capitalize the subject line"
 
   # 4. Do not end the subject line with a period
@@ -191,11 +163,10 @@ validate_commit_message() {
   # 5. Use the imperative mood in the subject line
   # ------------------------------------------------------------------------------
 
-  IMPERATIVE_MOOD_DENYLIST=(
+  IMPERATIVE_MOOD_BLACKLIST=(
     added          adds          adding
-    adjusted       adjusts       adjusting
-    amended        amends        amending
     avoided        avoids        avoiding
+    amended        amends        amending
     bumped         bumps         bumping
     changed        changes       changing
     checked        checks        checking
@@ -203,34 +174,20 @@ validate_commit_message() {
     copied         copies        copying
     corrected      corrects      correcting
     created        creates       creating
-    decreased      decreases     decreasing
     deleted        deletes       deleting
-    disabled       disables      disabling
-    dropped        drops         dropping
-    duplicated     duplicates    duplicating
-    enabled        enables       enabling
-    excluded       excludes      excluding
     fixed          fixes         fixing
-    handled        handles       handling
     implemented    implements    implementing
     improved       improves      improving
-    included       includes      including
-    increased      increases     increasing
-    installed      installs      installing
     introduced     introduces    introducing
-    merged         merges        merging
     moved          moves         moving
     pruned         prunes        pruning
     refactored     refactors     refactoring
-    released       releases      releasing
     removed        removes       removing
     renamed        renames       renaming
     replaced       replaces      replacing
     resolved       resolves      resolving
-    reverted       reverts       reverting
     showed         shows         showing
     tested         tests         testing
-    tidied         tidies        tidying
     updated        updates       updating
     used           uses          using
   )
@@ -238,9 +195,9 @@ validate_commit_message() {
   # enable case insensitive match
   shopt -s nocasematch
 
-  for DENYLISTED_WORD in "${IMPERATIVE_MOOD_DENYLIST[@]}"; do
-    [[ ${COMMIT_SUBJECT_TO_PROCESS} =~ ^[[:blank:]]*$DENYLISTED_WORD ]]
-    test $? -eq 0 && add_warning 1 "Use the imperative mood in the subject line, e.g., 'fix' not 'fixes'" && break
+  for BLACKLISTED_WORD in "${IMPERATIVE_MOOD_BLACKLIST[@]}"; do
+    [[ ${COMMIT_SUBJECT} =~ ^[[:blank:]]*$BLACKLISTED_WORD ]]
+    test $? -eq 0 && add_warning 1 "Use the imperative mood in the subject line, e.g 'fix' not 'fixes'" && break
   done
 
   # disable case insensitive match
@@ -265,18 +222,14 @@ validate_commit_message() {
   # 8. Do no write single worded commits
   # ------------------------------------------------------------------------------
 
-  COMMIT_SUBJECT_WORDS=(${COMMIT_SUBJECT_TO_PROCESS})
+  COMMIT_SUBJECT_WORDS=(${COMMIT_SUBJECT})
   test "${#COMMIT_SUBJECT_WORDS[@]}" -gt 1
   test $? -eq 0 || add_warning 1 "Do no write single worded commits"
-
-  # 8a. Do not mention C source filenames
-  [[ ${COMMIT_SUBJECT_TO_PROCESS} =~ [_a-zA-Z0-9]+\.[ch]$ ]]
-  test $? -eq 1 || add_warning 1 "Avoid mentioning C source filenames"
 
   # 9. Do not start the subject line with whitespace
   # ------------------------------------------------------------------------------
 
-  [[ ${COMMIT_SUBJECT_TO_PROCESS} =~ ^[[:blank:]]+ ]]
+  [[ ${COMMIT_SUBJECT} =~ ^[[:blank:]]+ ]]
   test $? -eq 1 || add_warning 1 "Do not start the subject line with whitespace"
 }
 
@@ -306,7 +259,7 @@ while true; do
   display_warnings
 
   # Ask the question (not using "read -p" as it uses stderr not stdout)
-  echo -en "${CYAN}Proceed with commit? [e/n/?] ${NC}"
+  echo -en "${BLUE}Proceed with commit? [e/y/n/?] ${NC}"
 
   # Read the answer
   read REPLY < "$TTY"
@@ -314,6 +267,7 @@ while true; do
   # Check if the reply is valid
   case "$REPLY" in
     E*|e*) $HOOK_EDITOR "$COMMIT_MSG_FILE" < $TTY; continue ;;
+    Y*|y*) exit 0 ;;
     N*|n*) exit 1 ;;
     *)     SKIP_DISPLAY_WARNINGS=1; prompt_help; continue ;;
   esac
