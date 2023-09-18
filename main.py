@@ -1,12 +1,16 @@
 import sys
+import draw
 import argparse
 
 
-def run():
-    return 0
-
-
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="envoy configuration visualization")
+    parser.add_argument(
+        "ip_address", help="The IP address endpoint of enovy proxy", type=str
+    )
+    parser.add_argument(
+        "port", help="The port of admin endpoint of envoy proxy", type=int
+    )
 
-    run(sys.argv[0], sys.argv[1:])
+    args = parser.parse_args()
+    draw.create_diagram(args.ip_address, args.port)
