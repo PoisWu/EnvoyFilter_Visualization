@@ -38,13 +38,19 @@ def create_diagram(ip_address: str, port: int):
     config_dump = download_envoyconfig(ip_address, port)
 
     # configuration of graph
-    _graph_attr = {("dpi", "300"), ("style", "rounded"), ("compound", "true")}
+    _graph_attr = {
+        ("dpi", "300"),
+        ("style", "rounded"),
+        ("compound", "true"),
+        ("rankdir", "LR"),
+    }
 
     # Create graph
     global graph
     graph = graphviz.Digraph(comment="graph", format="png", graph_attr=_graph_attr)
 
     graph.node("client", label="client")
+    graph.attr("node", color="#E8CEB5", style="filled")
 
     # Generate subgraph for envoy
     envoy_subgraph(graph, config_dump)
@@ -67,7 +73,7 @@ def envoy_subgraph(graph, config_dump):
 
     # Create envoy subgraph
     g_envoy = graphviz.Digraph(name="cluster_envoy")
-    g_envoy.attr(label="envoy")
+    g_envoy.attr(label="envoy", bgcolor="#F1F1F1")
 
     # Retrive ListenersConfigDump data
     config_listener_dump = config_dump["configs"][2]
@@ -101,8 +107,14 @@ def static_listeners_subgraph(g_envoy, config_static_listeners):
         listener_name = config_listener["name"]
 
         # Create diagram for listener
-        g_listener = graphviz.Digraph(name="cluster_" + listener_name)
-        g_listener.attr(label=listener_name)
+        g_listener = graphviz.Digraph(name=f"cluster_{listener_name}")
+        g_listener.attr(
+            label=f"Listener: {listener_name}",
+            bgcolor="#FFF0C5",
+            fontsize="5pt",
+            fontname="Hack Nerd Font Mono",
+            labeljust="r",
+        )
 
         global listener_info
         listener_info = config_listener["address"]["socket_address"]
@@ -132,7 +144,7 @@ def filter_chain_subgraph(g_listener, config_filter_chains, prefix_id):
 
         # Create filter_chain subgraph
         g_filter_chain = graphviz.Digraph(name=prefix_id)
-        g_filter_chain.attr(label=filter_chain_name)
+        g_filter_chain.attr(label=filter_chain_name, bgcolor="#C7DEF1")
         pre_node_id = "client"
 
         # Generate filter's graph
@@ -159,6 +171,7 @@ def filter_subgraph(g_filter_chain, config_filter, prefix_id, pre_node_id):
     # Drawing filter subgraph
     g_filter = graphviz.Digraph(name="cluster_" + prefix_id + filter_name)
     g_filter.attr(label=filter_name)
+    g_filter.attr("node", bgcolor="#E8CEB5")
 
     config_filter_type = config_filter["typed_config"]
 
@@ -180,7 +193,14 @@ def filter_subgraph(g_filter_chain, config_filter, prefix_id, pre_node_id):
                     address = listener_info["address"]
                     port = listener_info["port_value"]
 
-                    graph.edge(pre_node_id, id, taillabel=f"{address}:{port}")
+                    # graph.edge(pre_node_id, id, taillabel=f"{address}:{port}" )
+                    graph.edge(
+                        pre_node_id,
+                        id,
+                        taillabel=f"{port}",
+                        fontsize="7pt",
+                        fontname="Hack Nerd Font Mono",
+                    )
 
                 # Update the previous node
                 pre_node_id = id
