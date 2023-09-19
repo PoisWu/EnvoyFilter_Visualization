@@ -107,8 +107,14 @@ def static_listeners_subgraph(g_envoy, config_static_listeners):
         listener_name = config_listener["name"]
 
         # Create diagram for listener
-        g_listener = graphviz.Digraph(name="cluster_" + listener_name)
-        g_listener.attr(label=listener_name, bgcolor="#FFF0C5")
+        g_listener = graphviz.Digraph(name=f"cluster_{listener_name}")
+        g_listener.attr(
+            label=f"Listener: {listener_name}",
+            bgcolor="#FFF0C5",
+            fontsize="5pt",
+            fontname="Hack Nerd Font Mono",
+            labeljust="r",
+        )
 
         global listener_info
         listener_info = config_listener["address"]["socket_address"]
