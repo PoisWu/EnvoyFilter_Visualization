@@ -125,7 +125,7 @@ def filter_chain_subgraph(g_listener, config_filter_chains, prefix_id):
         # Create filter_chain subgraph
         g_filter_chain = graphviz.Digraph(name=prefix_id)
         g_filter_chain.attr(label=filter_chain_name)
-        pre_node_id = None
+        pre_node_id = "client"
 
         # Generate filter's graph
         for config_filter in config_filter_chain["filters"]:
@@ -166,8 +166,10 @@ def filter_subgraph(g_filter_chain, config_filter, prefix_id, pre_node_id):
                 g_filter.node(id, http_filter_name)
 
                 # Link up from the previous node
-                if pre_node_id:
+                if pre_node_id != "client":
                     g_filter.edge(pre_node_id, id)
+                else:
+                    graph.edge(pre_node_id, id)
 
                 # Update the previous node
                 pre_node_id = id
