@@ -7,6 +7,11 @@ from type import Type
 
 graph = None
 
+# envoy config its open port with 'listener' configuration
+# The format of listener_info is {address: "0.0.0.0", port_value: <int>}
+# Can be fetch under [listener][address][socket_address]
+listener_info = None
+
 
 def download_envoyconfig(ip_address: str, port: int):
     """Dowload envoy's configuration
@@ -99,6 +104,9 @@ def static_listeners_subgraph(g_envoy, config_static_listeners):
         g_listener = graphviz.Digraph(name="cluster_" + listener_name)
         g_listener.attr(label=listener_name)
 
+        global listener_info
+        listener_info = config_listener["address"]["socket_address"]
+
         config_filter_chains = config_listener["filter_chains"]
 
         # Generate diagram for filter chains inside listener
@@ -169,7 +177,10 @@ def filter_subgraph(g_filter_chain, config_filter, prefix_id, pre_node_id):
                 if pre_node_id != "client":
                     g_filter.edge(pre_node_id, id)
                 else:
-                    graph.edge(pre_node_id, id)
+                    address = listener_info["address"]
+                    port = listener_info["port_value"]
+
+                    graph.edge(pre_node_id, id, taillabel=f"{address}:{port}")
 
                 # Update the previous node
                 pre_node_id = id
