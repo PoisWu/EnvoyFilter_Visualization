@@ -29,7 +29,7 @@ for FILE in $FILES; do
     mv $nf $dupsource
     $BLACK $dupsource 2>> /dev/null
     $DIFF -u -p -B --label="modified $FILE" --label="expected coding style" \
-          "${dupsource}" "${FILE}"
+           "${FILE}" "${dupsource}"
     r=$?
     rm -rf "${tempdir}"
     if [ $r != 0 ] ; then
