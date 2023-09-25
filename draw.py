@@ -13,19 +13,6 @@ graph = None
 listener_info = None
 
 
-def download_envoyconfig(ip_address: str, port: int):
-    """Dowload envoy's configuration
-    Args:
-        ip_address (str): The IP address of admin API endpoint
-        port (int): The port of admin API endpoint
-    Returns:
-        config_dump
-    """
-
-    with urllib.request.urlopen(f"http://{ip_address}:{port}/config_dump") as url:
-        config_dump = json.load(url)
-    return config_dump
-
 
 def create_diagram(config_dump):
     # configuration of graph
@@ -53,43 +40,6 @@ def create_diagram(config_dump):
     graph.render(directory="graph", view=True)
 
     return 0
-
-
-# def create_diagram(ip_address: str, port: int):
-#     """Create a diagram of envoy's listeners
-#     Args:
-#         ip_address (str): The IP address of admin API endpoint
-#         port (int): The port of admin API endpoint
-#     """
-#
-#     # Download config of envoy
-#     config_dump = download_envoyconfig(ip_address, port)
-#
-#     # configuration of graph
-#     _graph_attr = {
-#         ("dpi", "300"),
-#         ("style", "rounded"),
-#         ("compound", "true"),
-#         ("rankdir", "LR"),
-#     }
-#
-#     # Create graph
-#     global graph
-#     graph = graphviz.Digraph(comment="graph", format="png", graph_attr=_graph_attr)
-#
-#     graph.node("client", label="client")
-#     graph.attr("node", color="#E8CEB5", style="filled")
-#
-#     # Generate subgraph for envoy
-#     envoy_subgraph(graph, config_dump)
-#
-#     if __debug__:
-#         print(graph.source)
-#
-#     # Render the diagraph
-#     graph.render(directory="graph", view=True)
-#
-#     return 0
 
 
 def envoy_subgraph(graph, config_dump):
@@ -264,62 +214,6 @@ def filter_chain_subgraph(g_listener, config_filter_chains, prefix_id):
         g_listener.subgraph(g_filter_chain)
 
     return 0
-
-
-# def filter_subgraph(g_filter_chain, config_filter, prefix_id, pre_node_id):
-#     """Generate diagram of filter
-#     Args:
-#         g_filter_chain : parent filter chain graph that filter diagram is put inside the diagram
-#         config_filter: The configuration of filter
-#         prefix_id: The prefix for filters' id
-#         pre_node_id: ID of previous filter (filter chain)
-#     """
-#     global graph
-#     filter_name = config_filter["name"].split(".")[-1]
-#
-#     # Drawing filter subgraph
-#     g_filter = graphviz.Digraph(name="cluster_" + prefix_id + filter_name)
-#     g_filter.attr(label=filter_name)
-#     g_filter.attr("node", bgcolor="#E8CEB5")
-#
-#     config_filter_type = config_filter["typed_config"]
-#     id = None
-#
-#     match config_filter_type["@type"]:
-#         # Generate diagram for Http_Connection_Manager type
-#         case Type.HCM_FILTER_T:
-#             # Drawing compone in the filter subgraph
-#             for http_filter in config_filter_type["http_filters"]:
-#                 http_filter_name = http_filter["name"].split(".")[-1]
-#                 id = prefix_id + http_filter_name
-#
-#                 # create node
-#                 g_filter.node(id, http_filter_name)
-#
-#                 # Link up from the previous node
-#                 if pre_node_id != "client":
-#                     g_filter.edge(pre_node_id, id)
-#                 else:
-#                     address = listener_info["address"]
-#                     port = listener_info["port_value"]
-#
-#                     # graph.edge(pre_node_id, id, taillabel=f"{address}:{port}" )
-#                     graph.edge(
-#                         pre_node_id,
-#                         id,
-#                         taillabel=f"{address}:{port}",
-#                         fontsize="7pt",
-#                         fontname="Hack Nerd Font Mono",
-#                     )
-#
-#                 # Update the previous node
-#                 pre_node_id = id
-#         case _:
-#             print("The filter type isn't supported yet", file=sys.stderr)
-#
-#     # Add filter into filter_chain
-#     g_filter_chain.subgraph(g_filter)
-#     return id
 
 
 if __name__ == "__main__":
