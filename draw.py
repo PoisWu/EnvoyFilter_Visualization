@@ -97,7 +97,7 @@ def listeners_subgraph(g_envoy, config_listeners, isStatic=True):
             _label = f"Listener: {listener_name}"
 
         g_listener.attr(
-            label=str(_label),
+            label=_label,
             bgcolor="#FFF0C5",
             fontsize="5pt",
             fontname="Hack Nerd Font Mono",
@@ -108,9 +108,15 @@ def listeners_subgraph(g_envoy, config_listeners, isStatic=True):
         listener_info = config_listener["address"]["socket_address"]
 
         config_filter_chains = config_listener["filter_chains"]
+        try:
+            traffic_direction = config_listener["traffic_direction"]
+        except:
+            traffic_direction = "client"
 
         # Generate diagram for filter chains inside listener
-        filter_chain_subgraph(g_listener, config_filter_chains, listener_name)
+        filter_chain_subgraph(
+            g_listener, config_filter_chains, listener_name, traffic_direction
+        )
 
         # put diagram of listener into envoy graph
         g_envoy.subgraph(g_listener)
@@ -194,10 +200,10 @@ def filter_chain_subgraph(
                             fontsize="8pt",
                             fontname="Hack Nerd Font Mono",
                         )
+                    isFirstFilter = False
                     pre_node_id = id
                 g_filter_chain.subgraph(g_hcm_filter)
             isFirstFilter = False
-
         g_listener.subgraph(g_filter_chain)
 
     return 0
