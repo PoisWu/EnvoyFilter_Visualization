@@ -1,6 +1,7 @@
 import sys
 import urllib.request, json, graphviz
 from type import Type
+from FilterChainMatch import FilterChainMatch
 
 # Prepare graphviz graph
 # Some configuration of the generated image
@@ -12,22 +13,23 @@ graph = None
 # Can be fetch under [listener][address][socket_address]
 listener_info = None
 
+# configuration of graph
+_graph_attr = {
+    ("dpi", "300"),
+    ("style", "rounded"),
+    ("compound", "true"),
+    ("rankdir", "LR"),
+}
 
 
 def create_diagram(config_dump):
-    # configuration of graph
-    _graph_attr = {
-        ("dpi", "300"),
-        ("style", "rounded"),
-        ("compound", "true"),
-        ("rankdir", "LR"),
-    }
-
     # Create graph
     global graph
     graph = graphviz.Digraph(comment="graph", format="png", graph_attr=_graph_attr)
 
     graph.node("client", label="client")
+    graph.node("INBOUND", label="inbound")
+    graph.node("OUTBOUND", label="outbound")
     graph.attr("node", color="#E8CEB5", style="filled")
 
     # Generate subgraph for envoy
@@ -63,26 +65,39 @@ def envoy_subgraph(graph, config_dump):
     config_static_listeners = config_listener_dump["static_listeners"]
 
     # Genegrate listener's diagram
-    static_listeners_subgraph(g_envoy, config_static_listeners)
-    dynamic_listeners_subgraph(g_envoy, config_listener_dump["dynamic_listeners"])
+    listeners_subgraph(g_envoy, config_listener_dump["static_listeners"], True)
+    listeners_subgraph(g_envoy, config_listener_dump["dynamic_listeners"], False)
 
     # Put envoy diagram into root graph
     graph.subgraph(g_envoy)
     return 0
 
 
-def dynamic_listeners_subgraph(g_envoy, config_dynamic_listeners):
-    for id_listener, config_listener_lastupdate in enumerate(config_dynamic_listeners):
-        config_listener = config_listener_lastupdate["active_state"]["listener"]
+def listeners_subgraph(g_envoy, config_listeners, isStatic=True):
+    for id_listener, config_listener_lastupdate in enumerate(config_listeners):
+        # Here is the main difference
+        if isStatic:
+            config_listener = config_listener_lastupdate["listener"]
+        else:
+            config_listener = config_listener_lastupdate["active_state"]["listener"]
 
         assert config_listener["@type"] == Type.LISTENER_T, "It is not `Listener` type"
 
-        listener_name = f"d_{id_listener}"  # config_listener["name"]
+        if isStatic:
+            listener_name = f"s_{id_listener}"  # config_listener["name"]
+        else:
+            listener_name = f"d_{id_listener}"  # config_listener["name"]
 
         # Create diagram for listener
         g_listener = graphviz.Digraph(name=f"cluster_{listener_name}")
+
+        if isStatic:
+            _label = f"Listener: {listener_name}"
+        else:
+            _label = f"Listener: {listener_name}"
+
         g_listener.attr(
-            label=f"Listener: d_{listener_name}",
+            label=str(_label),
             bgcolor="#FFF0C5",
             fontsize="5pt",
             fontname="Hack Nerd Font Mono",
@@ -102,44 +117,9 @@ def dynamic_listeners_subgraph(g_envoy, config_dynamic_listeners):
     return 0
 
 
-def static_listeners_subgraph(g_envoy, config_static_listeners):
-    """Generate diagram of static listener
-    Args:
-        g_envoy: parent envoy graph that diagram is put inside the diagram
-        config_static_listeners: The dump configuration of static listeners
-    """
-    # static_listeners contain multiple listener
-    for id_listener, config_listener_lastupdate in enumerate(config_static_listeners):
-        config_listener = config_listener_lastupdate["listener"]
-
-        assert config_listener["@type"] == Type.LISTENER_T, "It is not `Listener` type"
-
-        listener_name = f"s_{id_listener}"  # config_listener["name"]
-
-        # Create diagram for listener
-        g_listener = graphviz.Digraph(name=f"cluster_{listener_name}")
-        g_listener.attr(
-            label=f"Listener: s_{listener_name}",
-            bgcolor="#FFF0C5",
-            fontsize="5pt",
-            fontname="Hack Nerd Font Mono",
-            labeljust="r",
-        )
-
-        global listener_info
-        listener_info = config_listener["address"]["socket_address"]
-
-        config_filter_chains = config_listener["filter_chains"]
-
-        # Generate diagram for filter chains inside listener
-        filter_chain_subgraph(g_listener, config_filter_chains, listener_name)
-
-        # put diagram of listener into envoy graph
-        g_envoy.subgraph(g_listener)
-    return 0
-
-
-def filter_chain_subgraph(g_listener, config_filter_chains, prefix_id):
+def filter_chain_subgraph(
+    g_listener, config_filter_chains, prefix_id, traffic_direction="client"
+):
     """Generate diagram of filter_chain
     Args:
         g_listener: parent listener graph that filter chain diagram is put inside the diagram
@@ -156,9 +136,14 @@ def filter_chain_subgraph(g_listener, config_filter_chains, prefix_id):
         # Create filter_chain subgraph
         g_filter_chain = graphviz.Digraph(name=prefix_id)
         g_filter_chain.attr(label=filter_chain_name, bgcolor="#C7DEF1")
-        pre_node_id = "client"
+        pre_node_id = traffic_direction
+        try:
+            chainMatch = FilterChainMatch(config_filter_chain["filter_chain_match"])
+        except:
+            chainMatch = ""
 
         # Generate filter's graph
+        isFirstFilter = True
         for config_filter in config_filter_chain["filters"]:
             filter_name = config_filter["name"].split(".")[-1]
             config_filter_type = config_filter["typed_config"]
@@ -167,7 +152,7 @@ def filter_chain_subgraph(g_listener, config_filter_chains, prefix_id):
                 # If filter type is deferent from HCM
                 id = prefix_id + filter_name
                 g_filter_chain.node(id, filter_name)
-                if pre_node_id != "client":
+                if not isFirstFilter:
                     g_filter_chain.edge(pre_node_id, id)
                 else:
                     address = listener_info["address"]
@@ -176,7 +161,7 @@ def filter_chain_subgraph(g_listener, config_filter_chains, prefix_id):
                     graph.edge(
                         pre_node_id,
                         id,
-                        headlabel=f"{address}:{port}",
+                        headlabel=f"{address}:{port}" + str(chainMatch),
                         fontsize="7pt",
                         fontname="Hack Nerd Font Mono",
                     )
@@ -196,7 +181,7 @@ def filter_chain_subgraph(g_listener, config_filter_chains, prefix_id):
                     g_hcm_filter.node(id, http_filter_name)
 
                     # Link up from the previous node
-                    if pre_node_id != "client":
+                    if not isFirstFilter:
                         g_hcm_filter.edge(pre_node_id, id)
                     else:
                         address = listener_info["address"]
@@ -211,6 +196,8 @@ def filter_chain_subgraph(g_listener, config_filter_chains, prefix_id):
                         )
                     pre_node_id = id
                 g_filter_chain.subgraph(g_hcm_filter)
+            isFirstFilter = False
+
         g_listener.subgraph(g_filter_chain)
 
     return 0
