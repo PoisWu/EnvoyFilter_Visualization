@@ -18,6 +18,7 @@ var (
 	render   = pflag.String("render", "", "How to render the result")
 )
 
+ 
 func main() {
 	pflag.Parse()
 	if *file != "" && *adminUrl != "" {
